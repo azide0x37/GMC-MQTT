@@ -4,20 +4,21 @@ import (
 	"bufio"
 	"fmt"
 	"log"
-	"time"
 
-	"github.com/tarm/serial"
+	"go.bug.st/serial"
 )
 
 // GMC represents a connection to a GMC-300s device via serial.
 type GMC struct {
-	port *serial.Port
+	port serial.Port
 }
 
 // NewGMC opens a connection to the GMC device on the specified serial port with the given baud rate.
 func NewGMC(portName string, baud int) (*GMC, error) {
-	c := &serial.Config{Name: portName, Baud: baud, ReadTimeout: 5 * time.Second}
-	port, err := serial.OpenPort(c)
+	mode := &serial.Mode{
+		BaudRate: baud,
+	}
+	port, err := serial.Open(portName, mode)
 	if err != nil {
 		return nil, err
 	}
