@@ -1,0 +1,8 @@
+serial_device = "/dev/ttyUSB0"
+baud_rate = 9600
+mqtt_host = "localhost"
+mqtt_port = 1883
+query_interval = 10
+publish_topic = "gmc/data"
+config_topic = "gmc/config/temp"
+permanent_config_topic = "gmc/config/permanent"
