@@ -31,7 +31,7 @@ func main() {
 
 	// Subscribe to configuration update topics.
 	if token := mqttClient.Subscribe(cfg.ConfigTopic, 0, mqtt.ConfigMessageHandler); token.Wait() && token.Error() != nil {
-		log.Printf("Error subscribing to temp config topic: %v", token.Error())
+		log.Printf("Error subscribing to temporary config topic: %v", token.Error())
 	} else {
 		log.Printf("Subscribed to temporary config topic: %s", cfg.ConfigTopic)
 	}
@@ -64,9 +64,12 @@ func main() {
 			log.Printf("Error querying GMC device: %v", err)
 			continue
 		}
-		log.Printf("Data received: %s", data)
 
-		// Publish data to MQTT.
+		// Log the raw response for debugging purposes.
+		log.Printf("Raw response from GMC-300s: %s", data)
+
+		// TODO: Parse the raw data if needed and publish to more specific topics.
+		// For now, we publish the entire raw response to the configured publish topic.
 		token := mqttClient.Publish(cfg.PublishTopic, 0, false, data)
 		token.Wait()
 		if token.Error() != nil {
