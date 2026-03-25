@@ -1,9 +1,30 @@
 serial_device = "/dev/ttyUSB0"
 baud_rate = 9600
-mqtt_host = "homeassistant"
+mqtt_host = "localhost"
 mqtt_port = 1883
 query_interval = 10
-publish_topic = "gmc/data"
+
+# state_topic is canonical. publish_topic is a legacy alias kept for compatibility.
+state_topic = "gmc/state"
+publish_topic = "gmc/state"
+
 config_topic = "gmc/config/temp"
 permanent_config_topic = "gmc/config/permanent"
 
+enable_discovery = true
+discovery_prefix = "homeassistant"
+
+# Device metadata used by Home Assistant discovery
+# Update these to match your device where possible.
+device_id = "gmc300_001"
+device_name = "GMC-300"
+device_manufacturer = "GQ Electronics"
+device_model = "GMC-300S"
+device_sw_version = "unknown"
+device_serial = "unknown"
+device_hw_version = "unknown"
+
+# Origin metadata for discovery
+origin_name = "GMC-MQTT"
+origin_sw = "gmc-mqtt"
+origin_url = "https://github.com/azide0x37/GMC-MQTT"

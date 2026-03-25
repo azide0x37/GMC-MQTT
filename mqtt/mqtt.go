@@ -7,6 +7,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+
 	"github.com/azide0x37/gmc-mqtt/config"
 )
 
@@ -15,7 +16,12 @@ func NewMQTTClient(cfg *config.Config) (mqtt.Client, error) {
 	brokerURL := fmt.Sprintf("tcp://%s:%d", cfg.MQTTHost, cfg.MQTTPort)
 	opts := mqtt.NewClientOptions().AddBroker(brokerURL)
 	opts.SetClientID("gmc-mqtt-client-" + strconv.Itoa(int(time.Now().UnixNano())))
-	// Optional: set additional options such as auto-reconnect.
+	opts.SetAutoReconnect(true)
+	opts.SetConnectRetry(true)
+	opts.SetConnectRetryInterval(2 * time.Second)
+	opts.SetMaxReconnectInterval(30 * time.Second)
+	opts.SetKeepAlive(30 * time.Second)
+	opts.SetPingTimeout(5 * time.Second)
 	opts.OnConnect = func(c mqtt.Client) {
 		log.Println("MQTT connected")
 	}
@@ -33,13 +39,41 @@ func NewMQTTClient(cfg *config.Config) (mqtt.Client, error) {
 }
 
 // ConfigMessageHandler handles temporary configuration update messages.
-func ConfigMessageHandler(client mqtt.Client, msg mqtt.Message) {
-	log.Printf("Temporary configuration update received on topic %s: %s", msg.Topic(), string(msg.Payload()))
-	// TODO: Implement temporary configuration update logic (apply changes in-memory)
+func ConfigMessageHandler(manager *config.Manager) mqtt.MessageHandler {
+	return func(client mqtt.Client, msg mqtt.Message) {
+		log.Printf("Temporary configuration update received on topic %s: %s", msg.Topic(), string(msg.Payload()))
+		summary, err := manager.ApplyJSONUpdate(msg.Payload(), false)
+		if err != nil {
+			log.Printf("Temporary configuration update failed: %v", err)
+			return
+		}
+		if len(summary.Changed) == 0 {
+			log.Printf("Temporary configuration update made no changes.")
+			return
+		}
+		log.Printf("Temporary configuration updated: %v", summary.Changed)
+		if summary.RestartRequired {
+			log.Printf("Restart required for changes: %v", summary.Changed)
+		}
+	}
 }
 
 // PermanentConfigMessageHandler handles permanent configuration update messages.
-func PermanentConfigMessageHandler(client mqtt.Client, msg mqtt.Message) {
-	log.Printf("Permanent configuration update received on topic %s: %s", msg.Topic(), string(msg.Payload()))
-	// TODO: Implement permanent configuration update logic (e.g., update config file)
+func PermanentConfigMessageHandler(manager *config.Manager) mqtt.MessageHandler {
+	return func(client mqtt.Client, msg mqtt.Message) {
+		log.Printf("Permanent configuration update received on topic %s: %s", msg.Topic(), string(msg.Payload()))
+		summary, err := manager.ApplyJSONUpdate(msg.Payload(), true)
+		if err != nil {
+			log.Printf("Permanent configuration update failed: %v", err)
+			return
+		}
+		if len(summary.Changed) == 0 {
+			log.Printf("Permanent configuration update made no changes.")
+			return
+		}
+		log.Printf("Permanent configuration updated and persisted: %v", summary.Changed)
+		if summary.RestartRequired {
+			log.Printf("Restart required for changes: %v", summary.Changed)
+		}
+	}
 }

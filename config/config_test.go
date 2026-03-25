@@ -19,7 +19,7 @@ baud_rate = 9600
 mqtt_host = "localhost"
 mqtt_port = 1883
 query_interval = 10
-publish_topic = "gmc/data"
+state_topic = "gmc/state"
 config_topic = "gmc/config/temp"
 permanent_config_topic = "gmc/config/permanent"
 `
@@ -35,5 +35,18 @@ permanent_config_topic = "gmc/config/permanent"
 
 	if cfg.MQTTHost != "localhost" {
 		t.Errorf("Expected MQTTHost to be 'localhost', got %s", cfg.MQTTHost)
+	}
+	if cfg.StateTopic != "gmc/state" {
+		t.Errorf("Expected StateTopic to be 'gmc/state', got %s", cfg.StateTopic)
+	}
+	if cfg.PublishTopic != "gmc/state" {
+		t.Errorf("Expected PublishTopic to mirror StateTopic, got %s", cfg.PublishTopic)
+	}
+}
+
+func TestValidateConfigRequiresFields(t *testing.T) {
+	cfg := &Config{}
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatalf("expected validation error for missing fields")
 	}
 }
