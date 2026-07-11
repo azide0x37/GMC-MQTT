@@ -3,89 +3,86 @@ package config
 import (
 	"fmt"
 	"os"
-
-	"github.com/BurntSushi/toml"
+	"strconv"
 )
 
-// Config holds the configuration loaded from the TOML file.
+const (
+	DefaultSerialDevice  = "/dev/ttyUSB0"
+	DefaultBaudRate      = 115200
+	DefaultQueryInterval = 1
+	DefaultStatePath     = "/run/muster/gmc-mqtt/state.json"
+	DefaultLedgerPath    = "/var/lib/gmc-mqtt/ledger.jsonl"
+)
+
+// Config holds collector-only runtime configuration. MQTT and Home Assistant
+// settings are owned by the Muster bridge scripts.
 type Config struct {
-	SerialDevice  string `toml:"serial_device"`
-	BaudRate      int    `toml:"baud_rate"`
-	MQTTHost      string `toml:"mqtt_host"`
-	MQTTPort      int    `toml:"mqtt_port"`
-	QueryInterval int    `toml:"query_interval"` // seconds between queries
-	PublishTopic  string `toml:"publish_topic"`  // legacy alias for state_topic
-
-	ConfigTopic          string `toml:"config_topic"`
-	PermanentConfigTopic string `toml:"permanent_config_topic"`
-
-	// Discovery settings for Home Assistant MQTT Discovery
-	EnableDiscovery    bool   `toml:"enable_discovery"`
-	DiscoveryPrefix    string `toml:"discovery_prefix"` // default "homeassistant"
-	DeviceID           string `toml:"device_id"`        // unique device id, e.g., "gmc300_001"
-	DeviceName         string `toml:"device_name"`      // e.g., "GMC-300"
-	DeviceManufacturer string `toml:"device_manufacturer"`
-	DeviceModel        string `toml:"device_model"`
-	DeviceSWVersion    string `toml:"device_sw_version"`
-	DeviceSerial       string `toml:"device_serial"`
-	DeviceHWVersion    string `toml:"device_hw_version"`
-
-	// Origin information for discovery
-	OriginName string `toml:"origin_name"`
-	OriginSW   string `toml:"origin_sw"`
-	OriginURL  string `toml:"origin_url"`
-
-	// StateTopic: where sensor state messages are published
-	StateTopic string `toml:"state_topic"`
+	SerialDevice  string
+	BaudRate      int
+	QueryInterval int
+	StatePath     string
+	LedgerPath    string
 }
 
-func normalizeConfig(cfg *Config) {
-	if cfg.StateTopic == "" && cfg.PublishTopic != "" {
-		cfg.StateTopic = cfg.PublishTopic
+func DefaultConfig() Config {
+	return Config{
+		SerialDevice:  DefaultSerialDevice,
+		BaudRate:      DefaultBaudRate,
+		QueryInterval: DefaultQueryInterval,
+		StatePath:     DefaultStatePath,
+		LedgerPath:    DefaultLedgerPath,
 	}
-	if cfg.StateTopic != "" && cfg.PublishTopic != cfg.StateTopic {
-		cfg.PublishTopic = cfg.StateTopic
+}
+
+func LoadConfigFromEnv() (Config, error) {
+	cfg := DefaultConfig()
+
+	cfg.SerialDevice = stringFromEnv("GMC_SERIAL_DEVICE", cfg.SerialDevice)
+	cfg.BaudRate = intFromEnv("GMC_BAUD_RATE", cfg.BaudRate)
+	cfg.QueryInterval = intFromEnv("GMC_QUERY_INTERVAL", cfg.QueryInterval)
+	cfg.StatePath = stringFromEnv("GMC_STATE_PATH", cfg.StatePath)
+	cfg.LedgerPath = stringFromEnv("GMC_LEDGER_PATH", cfg.LedgerPath)
+
+	if err := ValidateConfig(&cfg); err != nil {
+		return Config{}, err
 	}
-	if cfg.DiscoveryPrefix == "" {
-		cfg.DiscoveryPrefix = "homeassistant"
-	}
+	return cfg, nil
 }
 
 func ValidateConfig(cfg *Config) error {
 	if cfg.SerialDevice == "" {
-		return fmt.Errorf("serial_device is required")
+		return fmt.Errorf("GMC_SERIAL_DEVICE is required")
 	}
-	if cfg.MQTTHost == "" {
-		return fmt.Errorf("mqtt_host is required")
-	}
-	if cfg.MQTTPort <= 0 {
-		return fmt.Errorf("mqtt_port must be > 0")
+	if cfg.BaudRate <= 0 {
+		return fmt.Errorf("GMC_BAUD_RATE must be > 0")
 	}
 	if cfg.QueryInterval <= 0 {
-		return fmt.Errorf("query_interval must be > 0")
+		return fmt.Errorf("GMC_QUERY_INTERVAL must be > 0")
 	}
-	if cfg.StateTopic == "" {
-		return fmt.Errorf("state_topic is required")
+	if cfg.StatePath == "" {
+		return fmt.Errorf("GMC_STATE_PATH is required")
+	}
+	if cfg.LedgerPath == "" {
+		return fmt.Errorf("GMC_LEDGER_PATH is required")
 	}
 	return nil
 }
 
-// LoadConfig loads the configuration from the given TOML file.
-func LoadConfig(path string) (*Config, error) {
-	var cfg Config
+func stringFromEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
 
-	file, err := os.Open(path)
+func intFromEnv(key string, fallback int) int {
+	value, ok := os.LookupEnv(key)
+	if !ok || value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
 	if err != nil {
-		return nil, err
+		return 0
 	}
-	defer file.Close()
-
-	if _, err := toml.DecodeReader(file, &cfg); err != nil {
-		return nil, err
-	}
-	normalizeConfig(&cfg)
-	if err := ValidateConfig(&cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+	return parsed
 }

@@ -1,0 +1,8 @@
+[Unit]
+Description=GMC-MQTT Home Assistant MQTT bridge
+After=network-online.target gmc-mqtt-collector.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gmc-mqtt/current/bin/gmc-mqtt-ha-bridge.sh --apply --once

@@ -1,0 +1,348 @@
+schema: 2
+framework: Muster
+project:
+  name: gmc-mqtt
+  display_name: GMC MQTT Bridge
+  type: linux-service-appliance
+  version_file: VERSION
+  config_dir: /etc/gmc-mqtt
+  install_dir: /opt/gmc-mqtt
+  current_link: /opt/gmc-mqtt/current
+  release_dir: /opt/gmc-mqtt/releases
+architecture:
+  summary: Polls a GMC-300 counter over serial and publishes bounded state and Home Assistant MQTT discovery.
+  source: GMC-300 USB serial
+  local_state: /run/muster/gmc-mqtt/state.json
+  outward_bridge: Home Assistant MQTT
+lifecycle:
+  manager: systemd
+  update_polling: systemd-timer
+  health_check: bin/doctor.sh
+patterns:
+  source: https://github.com/azide0x37/muster-pattern-library/tree/main
+  verified_head: ea6d02aaa6860e5102a760473b2ffe9b90d13c75
+  primary: T2R6.home-assistant-mqtt-bridge
+  coverage: partial
+  limitation: Bounded MQTT control ingestion remains reserved but is not enabled.
+python:
+  allowed: when shell becomes structurally worse for typed state, parsing, APIs, JSON, or orchestration
+  required_tool: uv
+release:
+  artifact_prefix: gmc-mqtt
+  manifest: manifest.json
+  checksum: sha256
+compliance:
+  readme_self_certification_required: true
+  tests_required: true
+inspection:
+  id: implementation:gmc-mqtt
+  summary: Reads a GMC-300 counter and exposes its measurements to Home Assistant through MQTT.
+  literate:
+    what: A small Linux telemetry appliance with a serial collector and a separately supervised MQTT bridge.
+    why: Serial acquisition and outward broker publication need independent failure and inspection boundaries.
+    responsibilities:
+      - poll the configured GMC-300 serial device
+      - persist an atomic local measurement snapshot and durable event ledger
+      - publish Home Assistant discovery and state through a bounded MQTT bridge
+    failure_modes:
+      - the configured serial device is absent or unreadable
+      - collector state is absent, malformed, or stale
+      - the MQTT publisher is unavailable or the broker cannot be reached
+  root_components:
+    - component:gmc-mqtt:services
+    - component:gmc-mqtt:doctor
+    - component:gmc-mqtt:configuration
+    - component:gmc-mqtt:state
+    - component:gmc-mqtt:release
+    - component:gmc-mqtt:patterns
+  components:
+    - id: component:gmc-mqtt:services
+      kind: component.group
+      summary: Services and timers owned by GMC-MQTT.
+      children:
+        - component:gmc-mqtt:unit:gmc-mqtt-collector.service
+        - component:gmc-mqtt:unit:gmc-mqtt-ha-bridge.service
+        - component:gmc-mqtt:unit:gmc-mqtt-ha-bridge.timer
+        - component:gmc-mqtt:unit:gmc-mqtt-doctor.service
+        - component:gmc-mqtt:unit:gmc-mqtt-doctor.timer
+        - component:gmc-mqtt:unit:gmc-mqtt-update.service
+        - component:gmc-mqtt:unit:gmc-mqtt-update.timer
+      literate:
+        what: The complete systemd surface installed by GMC-MQTT.
+        why: Collection, publishing, health checks, and updates require separate supervised boundaries.
+    - id: component:gmc-mqtt:unit:gmc-mqtt-collector.service
+      kind: systemd.service
+      summary: Polls the GMC-300 and records local state.
+      source:
+        adapter: systemd.unit
+        unit: gmc-mqtt-collector.service
+        role: daemon
+      literate:
+        what: The long-running Go serial collector.
+        why: Device I/O must continue independently of MQTT availability.
+        responsibilities:
+          - query CPM and battery voltage
+          - calculate radiation units
+          - atomically replace the local state snapshot
+        failure_modes:
+          - serial device open or query fails
+          - runtime state cannot be written
+    - id: component:gmc-mqtt:unit:gmc-mqtt-ha-bridge.service
+      kind: systemd.service
+      summary: Publishes one state and discovery refresh to MQTT.
+      source:
+        adapter: systemd.unit
+        unit: gmc-mqtt-ha-bridge.service
+        role: oneshot
+        allow_inactive: true
+      literate:
+        what: A bounded Home Assistant MQTT publication run.
+        why: Broker failures must not block serial collection or create a resident retry loop.
+    - id: component:gmc-mqtt:unit:gmc-mqtt-ha-bridge.timer
+      kind: systemd.timer
+      summary: Schedules periodic MQTT publication.
+      source:
+        adapter: systemd.unit
+        unit: gmc-mqtt-ha-bridge.timer
+        role: timer
+      literate:
+        what: The persistent schedule for Home Assistant state refreshes.
+        why: systemd should own repeated publication and restart behavior.
+    - id: component:gmc-mqtt:unit:gmc-mqtt-doctor.service
+      kind: systemd.service
+      summary: Produces structured GMC-MQTT health evidence.
+      source:
+        adapter: systemd.unit
+        unit: gmc-mqtt-doctor.service
+        role: oneshot
+        allow_inactive: true
+      literate:
+        what: A bounded runtime health inspection.
+        why: The inspector needs current evidence rather than inferred process state alone.
+    - id: component:gmc-mqtt:unit:gmc-mqtt-doctor.timer
+      kind: systemd.timer
+      summary: Schedules periodic doctor observations.
+      source:
+        adapter: systemd.unit
+        unit: gmc-mqtt-doctor.timer
+        role: timer
+      literate:
+        what: The recurring health evidence schedule.
+        why: Serial and broker health can drift after installation.
+    - id: component:gmc-mqtt:unit:gmc-mqtt-update.service
+      kind: systemd.service
+      summary: Performs one rollback-aware update attempt.
+      source:
+        adapter: systemd.unit
+        unit: gmc-mqtt-update.service
+        role: oneshot
+        allow_inactive: true
+      literate:
+        what: The bounded release update transaction.
+        why: New code, units, registration, and doctor evidence must succeed or roll back together.
+    - id: component:gmc-mqtt:unit:gmc-mqtt-update.timer
+      kind: systemd.timer
+      summary: Polls for reviewed releases.
+      source:
+        adapter: systemd.unit
+        unit: gmc-mqtt-update.timer
+        role: timer
+      literate:
+        what: The persistent update polling schedule.
+        why: Release polling must survive restarts without a resident updater.
+    - id: component:gmc-mqtt:doctor
+      kind: doctor
+      summary: Latest structured runtime inspection of collector, state, and MQTT readiness.
+      source:
+        adapter: observation.file
+        state_file: /run/muster/gmc-mqtt/observations/doctor.json
+        max_age_seconds: 1800
+        absent_status: unknown
+      actions:
+        - id: action:gmc-mqtt:doctor.run
+          label: Run doctor
+          kind: doctor.run
+          command:
+            - /opt/gmc-mqtt/current/bin/doctor.sh
+            - --runtime
+          requires_root: true
+      literate:
+        what: Structured evidence covering configuration, installed units, serial state, and MQTT tooling.
+        why: A running collector does not prove that Home Assistant is receiving fresh measurements.
+    - id: component:gmc-mqtt:configuration
+      kind: component.group
+      summary: Preserved operator configuration.
+      children:
+        - component:gmc-mqtt:config:collector
+        - component:gmc-mqtt:config:mqtt
+        - component:gmc-mqtt:config:home-assistant
+      literate:
+        what: The root-managed settings outside immutable releases.
+        why: Device and broker identity must survive upgrades and rollback.
+    - id: component:gmc-mqtt:config:collector
+      kind: config.file
+      summary: Serial collector configuration.
+      source:
+        adapter: metadata.file
+        path: /etc/gmc-mqtt/collector.env
+        required: true
+      literate:
+        what: Serial path, baud rate, cadence, and state paths.
+        why: Hardware binding belongs to the deployed host rather than the release archive.
+    - id: component:gmc-mqtt:config:mqtt
+      kind: config.file
+      summary: MQTT broker and topic configuration.
+      source:
+        adapter: metadata.file
+        path: /etc/gmc-mqtt/mqtt.env
+        required: true
+      literate:
+        what: Broker address, credentials, publication timeout, and state topic.
+        why: Broker configuration and credentials remain operator-owned.
+    - id: component:gmc-mqtt:config:home-assistant
+      kind: config.file
+      summary: Home Assistant discovery metadata.
+      source:
+        adapter: metadata.file
+        path: /etc/gmc-mqtt/home-assistant.env
+        required: true
+      literate:
+        what: Device identity, entity prefix, and origin metadata.
+        why: Home Assistant identity must remain stable across immutable release changes.
+    - id: component:gmc-mqtt:state
+      kind: state.file
+      summary: Latest atomic collector measurement snapshot.
+      source:
+        adapter: metadata.file
+        path: /run/muster/gmc-mqtt/state.json
+        required: false
+      literate:
+        what: The local handoff containing CPM, battery, radiation units, identity, and timestamp.
+        why: The bridge consumes a cheap bounded fact instead of coupling MQTT to serial I/O.
+    - id: component:gmc-mqtt:release
+      kind: release.current
+      summary: Atomically selected active GMC-MQTT release.
+      source:
+        adapter: release.current
+        path: /opt/gmc-mqtt/current
+        required: true
+      literate:
+        what: The single moving pointer selecting immutable code and inspector declarations.
+        why: Rollback restores one coherent release identity.
+    - id: component:gmc-mqtt:patterns
+      kind: pattern.tree
+      summary: Resolved Home Assistant MQTT bridge pattern closure.
+      metadata:
+        source_commit: ea6d02aaa6860e5102a760473b2ffe9b90d13c75
+        coverage: partial
+      children:
+        - pattern:gmc-mqtt:T2R6.home-assistant-mqtt-bridge
+      literate:
+        what: The reusable operational vocabulary claimed by GMC-MQTT.
+        why: The inspector should explain the appliance through the exact installed Muster pattern tree.
+    - id: pattern:gmc-mqtt:T2R6.home-assistant-mqtt-bridge
+      kind: pattern.rare
+      summary: Home Assistant MQTT Bridge
+      metadata:
+        maturity: usable
+        coverage: partial
+        limitation: Telemetry and discovery are implemented; bounded control ingestion remains disabled.
+      source:
+        adapter: pattern
+        status: degraded
+      children:
+        - pattern:gmc-mqtt:C1.service-capsule
+        - pattern:gmc-mqtt:C2.persistent-tick
+        - pattern:gmc-mqtt:C5.failure-ratchet
+        - pattern:gmc-mqtt:C6.lifecycle-capsule
+        - pattern:gmc-mqtt:R4.state-ledger
+        - pattern:gmc-mqtt:T2C5.local-sidecar-bridge
+      literate:
+        what: The composed pattern for Home Assistant discovery, telemetry, and bounded appliance control.
+        why: It matches the split between local state production and outward MQTT publication.
+    - id: pattern:gmc-mqtt:C1.service-capsule
+      kind: pattern.common
+      summary: Service Capsule
+      metadata:
+        coverage: complete
+      source:
+        adapter: pattern
+      literate:
+        what: A systemd-owned execution boundary around one responsibility.
+        why: Collector, bridge, doctor, and updater need independent supervision.
+    - id: pattern:gmc-mqtt:C2.persistent-tick
+      kind: pattern.common
+      summary: Persistent Tick
+      metadata:
+        coverage: complete
+      source:
+        adapter: pattern
+      literate:
+        what: Persistent systemd timers for bridge, doctor, and update runs.
+        why: Scheduled obligations must resume after downtime.
+    - id: pattern:gmc-mqtt:C5.failure-ratchet
+      kind: pattern.common
+      summary: Failure Ratchet
+      metadata:
+        coverage: complete
+      source:
+        adapter: pattern
+      literate:
+        what: Collector, bridge outbox, ledger, and doctor observations retain actionable failure facts.
+        why: Transient recovery must not erase the evidence needed to diagnose repeated faults.
+    - id: pattern:gmc-mqtt:C6.lifecycle-capsule
+      kind: pattern.common
+      summary: Lifecycle Capsule
+      metadata:
+        coverage: complete
+      source:
+        adapter: pattern
+      literate:
+        what: Idempotent install, update, doctor, rollback, and uninstall ownership.
+        why: Release changes must preserve config and move atomically.
+    - id: pattern:gmc-mqtt:R4.state-ledger
+      kind: pattern.rare
+      summary: State Ledger
+      metadata:
+        coverage: complete
+      source:
+        adapter: pattern
+      literate:
+        what: Atomic runtime state, durable events, and structured doctor evidence.
+        why: Operators and the inspector need bounded facts rather than log inference.
+    - id: pattern:gmc-mqtt:T2C5.local-sidecar-bridge
+      kind: pattern.common
+      summary: Local Sidecar Bridge
+      metadata:
+        coverage: complete
+      source:
+        adapter: pattern
+      literate:
+        what: A local JSON handoff between serial collection and MQTT publication.
+        why: Each side can fail, restart, and be inspected independently.
+  edges:
+    - from: component:gmc-mqtt:unit:gmc-mqtt-ha-bridge.service
+      relation: depends_on
+      to: component:gmc-mqtt:unit:gmc-mqtt-collector.service
+      summary: MQTT publication consumes collector-produced state.
+    - from: component:gmc-mqtt:unit:gmc-mqtt-collector.service
+      relation: produces
+      to: component:gmc-mqtt:state
+    - from: component:gmc-mqtt:unit:gmc-mqtt-ha-bridge.service
+      relation: consumes
+      to: component:gmc-mqtt:state
+    - from: component:gmc-mqtt:doctor
+      relation: observes
+      to: component:gmc-mqtt:services
+    - from: component:gmc-mqtt:doctor
+      relation: observes
+      to: component:gmc-mqtt:state
+    - from: component:gmc-mqtt:configuration
+      relation: configures
+      to: component:gmc-mqtt:services
+    - from: component:gmc-mqtt:unit:gmc-mqtt-ha-bridge.service
+      relation: implements
+      to: pattern:gmc-mqtt:T2R6.home-assistant-mqtt-bridge
+    - from: component:gmc-mqtt:unit:gmc-mqtt-collector.service
+      relation: implements
+      to: pattern:gmc-mqtt:T2C5.local-sidecar-bridge

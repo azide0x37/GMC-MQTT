@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to build and publish (for example v1.2.3)"
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "version is required" >&2
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build release artifacts
+        run: sh packaging/build-release.sh "${{ steps.version.outputs.value }}"
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.value }}
+          generate_release_notes: true
+          files: |
+            dist/${{ steps.version.outputs.value }}/*.tar.gz
+            dist/${{ steps.version.outputs.value }}/checksums.txt
+            dist/${{ steps.version.outputs.value }}/install.sh
