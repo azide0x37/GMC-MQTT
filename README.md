@@ -1,106 +1,142 @@
 # GMC-MQTT
 
-GMC-MQTT is a simple Golang application designed for Raspbian that connects to a GMC-300s device via USB-serial, queries it for data, and publishes that data to an MQTT topic. The application uses a TOML configuration file to set options such as MQTT host, port, query interval, and serial port settings. It also subscribes to MQTT topics for both temporary and permanent configuration updates.
+GMC-MQTT is a Muster-native Linux service appliance for a GMC-300 series counter. The Go collector reads the counter over USB serial and writes local state. Muster-owned scripts publish that state and Home Assistant discovery over MQTT.
 
-## Features
+There is no required `config.toml`. Deployment configuration is seeded under `/etc/gmc-mqtt/` as shell-readable env files.
 
-- **Serial Communication:** Connects to a GMC-300s over USB-serial.
-- **Periodic Querying:** Interrogates the device at a configurable interval.
-- **MQTT Integration:** Publishes device data and listens for config update messages.
-- **TOML Configuration:** Easily change options via a simple config file.
-- **Modular and Testable:** Code segmented into clear packages with a sample test.
+## Architecture
+
+- `gmc-mqtt-collector.service`: runs `/opt/gmc-mqtt/current/bin/gmc-mqtt` and writes `/run/muster/gmc-mqtt/state.json`.
+- `gmc-mqtt-ha-bridge.timer`: runs the Home Assistant MQTT bridge every second.
+- `gmc-mqtt-ha-bridge.service`: publishes retained discovery payloads and non-retained state through `mosquitto_pub`.
+- `gmc-mqtt-doctor.timer`: periodically writes structured health evidence for the Muster inspector.
+- `gmc-mqtt-update.timer`: performs serialized, rollback-aware release checks.
 
 ## Installation
 
-For a simple deployment, run the following command on your Raspbian device:
+For a Raspberry Pi install from a published release:
 
 ```sh
-curl -sL https://derahm.com/gmc-mqtt-install.sh | sh
+curl -fsSL https://azidemakes.com/install/gmc-mqtt.sh | sudo sh
 ```
 
-## Build Procedure
-1. Clone the repository:
+For a staged local install:
 
-    ```sh
-    git clone https://github.com/azide0x37/GMC-MQTT.git
-    cd gmc-mqtt
-    ```
+```sh
+MUSTER_ROOT="$(mktemp -d)" sh bin/install.sh
+```
 
-2. Download dependencies and build:
-    ```sh
-    go mod tidy
-    go build -o gmc-mqtt ./cmd
-    ```
+The installer writes immutable runtime code to `/opt/gmc-mqtt/releases/<version>/`, updates `/opt/gmc-mqtt/current`, seeds `/etc/gmc-mqtt/*.env` only if missing, installs systemd units, bootstraps the shared Muster core when needed, and atomically registers GMC-MQTT under `/etc/muster/implementations.d/`.
 
-1.  Run tests:
+## Muster Inspector
 
-    ```sh
-    go test ./...
-    ```
+The installed schema-2 declaration and digest-bound lock project GMC-MQTT into the shared host inspector. Ordinary inspection is read-only and does not source the application env files or access the network.
+
+```sh
+muster list
+muster status gmc-mqtt
+muster inspect component:gmc-mqtt:state
+muster explain pattern:gmc-mqtt:T2R6.home-assistant-mqtt-bridge
+sudo muster doctor gmc-mqtt
+```
+
+Doctor writes `muster.observation/v1` evidence to `/run/muster/gmc-mqtt/observations/doctor.json`. The explicit doctor action requires root because it updates root-owned runtime evidence; browsing existing evidence does not.
 
 ## Configuration
-Edit the config.toml file to suit your setup:
 
-```toml
-serial_device = "/dev/ttyUSB0"
-baud_rate = 9600
-mqtt_host = "localhost"
-mqtt_port = 1883
-query_interval = 10
-state_topic = "gmc/state"
-publish_topic = "gmc/state" # legacy alias for state_topic
-config_topic = "gmc/config/temp"
-permanent_config_topic = "gmc/config/permanent"
+Edit these files after deployment:
 
-# Home Assistant discovery (optional)
-enable_discovery = true
-discovery_prefix = "homeassistant"
+- `/etc/gmc-mqtt/collector.env`
+- `/etc/gmc-mqtt/mqtt.env`
+- `/etc/gmc-mqtt/home-assistant.env`
 
-# Device metadata (used in discovery)
-device_id = "gmc300_001"
-device_name = "GMC-300"
-device_manufacturer = "GQ Electronics"
-device_model = "GMC-300S"
-device_sw_version = "unknown"
-device_serial = "unknown"
-device_hw_version = "unknown"
-
-# Origin metadata (used in discovery)
-origin_name = "GMC-MQTT"
-origin_sw = "gmc-mqtt"
-origin_url = "https://github.com/azide0x37/GMC-MQTT"
-```
-
-## Running
-After building the application, run it as follows:
+Production-ready example:
 
 ```sh
-./gmc-mqtt -config config.toml
+GMC_SERIAL_DEVICE=/dev/ttyUSB0
+GMC_BAUD_RATE=115200
+GMC_QUERY_INTERVAL=1
+
+GMC_MQTT_HOST=mainsail
+GMC_MQTT_PORT=1883
+GMC_STATE_TOPIC=homeassistant/sensor/gmc300/state
+GMC_CONFIG_TOPIC=gmc/config/temp
+GMC_PERMANENT_CONFIG_TOPIC=gmc/config/permanent
+
+GMC_ENABLE_DISCOVERY=true
+GMC_DISCOVERY_PREFIX=homeassistant
+GMC_DEVICE_ID=gmc300_001
+GMC_DEVICE_NAME=GMC-300
+GMC_DEVICE_MANUFACTURER=AzideMakes
+GMC_DEVICE_MODEL=GMC-300
+GMC_DEVICE_SW_VERSION=1.0
+GMC_DEVICE_SERIAL=gmc300_001
+GMC_DEVICE_HW_VERSION=1.0
+GMC_ORIGIN_NAME=gmc2mqtt
+GMC_ORIGIN_SW=1.0
+GMC_ORIGIN_URL=https://azidemakes.com/support
 ```
 
-## Configuration Updates via MQTT
-Publish JSON payloads to the configured topics to update settings at runtime.
+Restart after changing config:
 
-Temporary updates (not persisted): publish to `config_topic`  
-Permanent updates (persisted to config file): publish to `permanent_config_topic`
-
-Example payload:
-
-```json
-{
-  "query_interval": 5,
-  "state_topic": "gmc/state",
-  "serial_device": "/dev/ttyUSB0"
-}
+```sh
+sudo systemctl restart gmc-mqtt-collector.service
+sudo systemctl restart gmc-mqtt-ha-bridge.service
 ```
 
-Supported keys match the TOML configuration fields.
+## Local Development
 
-## Future Improvements
-Enhance error handling and automatic reconnection.
-Implement persistent configuration updates.
-Support more advanced command parsing for device interrogation.
+```sh
+go test ./...
+make test
+make package
+```
 
+When Go commands need a workspace-local cache:
+
+```sh
+GOCACHE="$PWD/.cache/go-build" GOMODCACHE="$PWD/.cache/go-mod" go test ./...
+```
+
+## Home Assistant
+
+The bridge publishes discovery entities for:
+
+- CPM
+- Battery voltage
+- Firmware version
+- Serial number
+- Uptime
+- `uSv/h`
+- `mR/h`
+
+Discovery topics use:
+
+```text
+<GMC_DISCOVERY_PREFIX>/sensor/<GMC_DEVICE_ID>_<entity>/config
+```
+
+State is published to `GMC_STATE_TOPIC`.
+
+## Self-Certification
+
+| Muster requirement | Evidence |
+| --- | --- |
+| systemd owns lifecycle | `systemd/gmc-mqtt-collector.service`, `systemd/gmc-mqtt-ha-bridge.service` |
+| timers own repeated checks | `systemd/gmc-mqtt-ha-bridge.timer`, `systemd/gmc-mqtt-doctor.timer`, `systemd/gmc-mqtt-update.timer` |
+| config under `/etc/<project>/` | `bin/install.sh` seeds `/etc/gmc-mqtt/*.env` |
+| runtime under `/opt/<project>/releases/<version>/` | `bin/install.sh` installs into `/opt/gmc-mqtt/releases/<version>/` |
+| `/opt/<project>/current` active link | `bin/install.sh` switches `/opt/gmc-mqtt/current` |
+| doctor exists | `bin/doctor.sh` |
+| install/update/uninstall exist | `bin/install.sh`, `bin/update.sh`, `bin/uninstall.sh` |
+| shared inspector bootstrap and registration | `bin/muster-bootstrap.sh`, `/etc/muster/implementations.d/gmc-mqtt.json` |
+| schema-2 component graph | `muster.yaml` |
+| deterministic installed projection | `muster.lock.json` |
+| structured doctor evidence | `bin/muster-observation.sh`, `/run/muster/gmc-mqtt/observations/doctor.json` |
+| transaction and registration rollback | `bin/release-transaction.sh`, `bin/install.sh`, `bin/update.sh` |
+| MPL patterns documented at a verified commit | `muster.yaml`, `MUSTER.md` |
+| tests cover core behavior | `go test ./...`, `tests/*.sh` |
 
 ## License
+
 MIT License

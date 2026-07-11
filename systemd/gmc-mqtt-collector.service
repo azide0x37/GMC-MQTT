@@ -1,0 +1,17 @@
+[Unit]
+Description=GMC-MQTT collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/opt/gmc-mqtt/current/etc/defaults/collector.env
+EnvironmentFile=-/etc/gmc-mqtt/collector.env
+ExecStart=/opt/gmc-mqtt/current/bin/gmc-mqtt
+Restart=always
+RestartSec=5
+RuntimeDirectory=muster/gmc-mqtt
+StateDirectory=gmc-mqtt
+
+[Install]
+WantedBy=multi-user.target

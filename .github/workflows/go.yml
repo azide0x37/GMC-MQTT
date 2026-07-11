@@ -1,7 +1,4 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
-name: Go
+name: CI
 
 on:
   push:
@@ -10,19 +7,32 @@ on:
     branches: [ "main" ]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.23.5'
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
-    - name: Build
-      run: go build -o gmc-mqtt ./cmd
+      - name: Test
+        run: make test
 
-    - name: Test
-      run: go test -v ./...
+      - name: Verify Muster inspector compatibility
+        run: |
+          git clone --depth 1 --branch v0.1.1 https://github.com/azide0x37/muster /tmp/muster
+          cd /tmp/muster
+          go build -buildvcs=false -mod=readonly -ldflags '-s -w -X github.com/azide0x37/muster/internal/cli.Version=0.1.1' -o /tmp/muster-cli ./cmd/muster
+          cd "$GITHUB_WORKSPACE"
+          MUSTER_CLI_SOURCE=/tmp/muster-cli MUSTER_CLI_VERSION=0.1.1 sh tests/test_inspector_cli.sh
+
+      - name: Check version output
+        run: go run ./cmd -version
+
+      - name: Build Muster package
+        run: make package
+
+      - name: Dry-run release build
+        run: sh packaging/build-release.sh v0.0.0-ci

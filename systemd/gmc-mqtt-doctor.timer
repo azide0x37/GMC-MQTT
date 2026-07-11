@@ -1,0 +1,10 @@
+[Unit]
+Description=Run GMC-MQTT doctor periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Unit=gmc-mqtt-doctor.service
+
+[Install]
+WantedBy=timers.target

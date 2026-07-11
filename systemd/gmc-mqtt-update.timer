@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for GMC-MQTT updates
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Unit=gmc-mqtt-update.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=GMC-MQTT doctor
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gmc-mqtt/current/bin/doctor.sh --runtime

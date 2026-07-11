@@ -1,0 +1,6 @@
+[Unit]
+Description=GMC-MQTT update check
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gmc-mqtt/current/bin/update.sh

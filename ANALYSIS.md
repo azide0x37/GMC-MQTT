@@ -1,38 +1,33 @@
-# Analysis Checklist (Scored & Ranked)
+# Analysis Checklist (Muster-Native Snapshot)
 
 Scoring: `2 = complete`, `1 = partial`, `0 = missing`.
-Ranking: `1` is highest priority for improvement.
 
-## Task Breakdown
-1. [x] Add unit tests for serial parsing, discovery payloads, config updates, and state calculations.
-2. [x] Expand README with discovery config + MQTT config update JSON format.
-3. [x] Add config validation for required fields.
+## Core Functionality
 
-## Core Functionality (Current State)
-1. [x] Serial communication with GMC-300s (Score: 2) - `gmc/gmc.go` implements commands and serial I/O.
-2. [x] Periodic querying loop (Score: 2) - ticker-based polling in `cmd/main.go`.
-3. [x] MQTT publish of state (Score: 2) - JSON state published to `state_topic` in `cmd/main.go`.
-4. [x] Home Assistant discovery payloads (Score: 2) - discovery messages published in `cmd/main.go` + `mqtt/discovery.go`.
-5. [x] Config loading + alignment of `publish_topic`/`state_topic` (Score: 2) - normalization mirrors legacy field.
+1. [x] GMC serial protocol collector (Score: 2)
+   - `gmc/gmc.go` owns serial commands and response parsing.
+2. [x] Atomic local state snapshot (Score: 2)
+   - `cmd/state.go` writes `/run/muster/gmc-mqtt/state.json`.
+3. [x] Durable event ledger (Score: 2)
+   - Collector appends JSONL events under `/var/lib/gmc-mqtt/ledger.jsonl`.
+4. [x] MQTT removed from Go (Score: 2)
+   - The Go module no longer depends on Paho MQTT or TOML config.
+5. [x] Home Assistant MQTT bridge (Score: 2)
+   - `bin/gmc-mqtt-ha-bridge.sh` owns discovery and state publish.
 
-## Missing / Partial Features (Ranked)
-1. [x] MQTT config updates (temporary + permanent) (Score: 2)
-   - Implemented with JSON updates and persistence.
-2. [x] Persistent config updates (Score: 2)
-   - Uses atomic write via temp file + rename.
-3. [x] Basic reconnect + timeouts (Score: 2)
-   - MQTT auto-reconnect and serial read timeouts + reopen logic.
-4. [x] Runtime reconfiguration of query interval/topics (Score: 2)
-   - Live updates to interval and subscription topics supported.
+## Muster Contract
 
-## Quality & Ops (Ranked)
-1. [x] Tests beyond config load (Score: 2)
-   - Added unit coverage for serial parsing, discovery payloads, config updates, and state calculations.
-2. [x] Documentation accuracy (Score: 2)
-   - `config.toml` fixed and README aligned for topics, discovery, and update JSON.
-3. [x] Clear config defaults/validation (Score: 2)
-   - Normalization and validation added for required fields.
+1. [x] Runtime under `/opt/gmc-mqtt/releases/<version>` with `/opt/gmc-mqtt/current`.
+2. [x] Config seeded under `/etc/gmc-mqtt/*.env`.
+3. [x] systemd owns collector, bridge, doctor, and update lifecycle.
+4. [x] Timers own repeated bridge publish, doctor checks, and update checks.
+5. [x] Lifecycle scripts exist for install, update, uninstall, doctor, and unit rendering.
+6. [x] Schema-2 manifest and deterministic lock expose the implementation to the shared CLI/TUI inspector.
+7. [x] Install/update atomically manage units, active release, and implementation registration.
+8. [x] Doctor emits `muster.observation/v1` evidence at the stable inspector path.
 
-## Report Card (Snapshot)
-- Testing: `B`
-- Documentation: `B`
+## Quality & Ops
+
+1. [x] Go tests cover collector config, serial parsing, state calculations, state writes, and ledger writes.
+2. [x] Shell tests cover bridge rendering, disabled discovery, missing publish dependency, staged install idempotence, shared core bootstrap, registration, structured doctor evidence, and lock integrity.
+3. [x] Packaging creates a Muster tarball and legacy multi-arch release archives.

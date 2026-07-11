@@ -1,0 +1,11 @@
+[Unit]
+Description=Publish GMC-MQTT Home Assistant state
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=1s
+AccuracySec=250ms
+Unit=gmc-mqtt-ha-bridge.service
+
+[Install]
+WantedBy=timers.target
