@@ -35,4 +35,8 @@ jobs:
         run: make package
 
       - name: Dry-run release build
-        run: sh packaging/build-release.sh v0.0.0-ci
+        run: sh packaging/build-release.sh "v$(cat VERSION)"
+
+      - name: Test standalone release installer
+        run: |
+          MUSTER_CLI_SOURCE=/tmp/muster-cli MUSTER_CLI_VERSION=0.1.1 GMC_INSTALL_ARCH=amd64 sh tests/test_release_installer.sh

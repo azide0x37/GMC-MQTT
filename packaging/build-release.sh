@@ -14,6 +14,11 @@ INPUT_VERSION="$1"
 VERSION=${INPUT_VERSION#v}
 RELEASE_TAG="v$VERSION"
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+SOURCE_VERSION=$(cat "$ROOT_DIR/VERSION")
+[ "$VERSION" = "$SOURCE_VERSION" ] || {
+  printf '%s\n' "release version $VERSION does not match VERSION=$SOURCE_VERSION" >&2
+  exit 1
+}
 OUTPUT_DIR="$ROOT_DIR/dist/$RELEASE_TAG"
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/gmc-mqtt-release.XXXXXX")
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM HUP

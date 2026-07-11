@@ -76,6 +76,12 @@ need_root() {
 }
 
 detect_arch() {
+  if [ -n "${GMC_INSTALL_ARCH:-}" ]; then
+    case "$GMC_INSTALL_ARCH" in
+      armv6|armv7|arm64|amd64) printf '%s\n' "$GMC_INSTALL_ARCH"; return ;;
+      *) release_die "unsupported GMC_INSTALL_ARCH: $GMC_INSTALL_ARCH" ;;
+    esac
+  fi
   os_name=$(uname -s 2>/dev/null || true)
   arch_name=$(uname -m 2>/dev/null || true)
   [ "$os_name" = "Linux" ] || release_die "unsupported operating system: $os_name"
