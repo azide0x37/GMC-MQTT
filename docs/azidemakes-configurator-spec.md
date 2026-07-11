@@ -6,7 +6,7 @@ This page lives on `azidemakes.com` and exists to generate a copyable Raspberry 
 The page must always output a fully runnable command in this shape:
 
 ```sh
-curl -fsSL https://azidemakes.com/install/gmc-mqtt.sh | sudo sh ...
+curl -fsSL https://github.com/azide0x37/GMC-MQTT/releases/latest/download/install.sh | sudo sh ...
 ```
 
 ## Information Architecture

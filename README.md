@@ -17,7 +17,7 @@ There is no required `config.toml`. Deployment configuration is seeded under `/e
 For a Raspberry Pi install from a published release:
 
 ```sh
-curl -fsSL https://azidemakes.com/install/gmc-mqtt.sh | sudo sh
+curl -fsSL https://github.com/azide0x37/GMC-MQTT/releases/latest/download/install.sh | sudo sh
 ```
 
 For a staged local install:

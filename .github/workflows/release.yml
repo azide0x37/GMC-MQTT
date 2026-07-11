@@ -36,6 +36,15 @@ jobs:
             echo "version is required" >&2
             exit 1
           fi
+          case "$VERSION" in
+            v*) RELEASE_VERSION="${VERSION#v}" ;;
+            *) echo "version must be a v-prefixed tag, for example v0.2.0" >&2; exit 1 ;;
+          esac
+          SOURCE_VERSION="$(cat VERSION)"
+          if [ "$RELEASE_VERSION" != "$SOURCE_VERSION" ]; then
+            echo "release tag $VERSION does not match VERSION=$SOURCE_VERSION" >&2
+            exit 1
+          fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build release artifacts

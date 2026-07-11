@@ -19,6 +19,7 @@ shell-test:
 	sh tests/test_update_registration_rollback.sh
 	sh tests/test_muster_yaml.sh
 	@if [ -n "$${MUSTER_CLI_SOURCE:-}" ]; then sh tests/test_inspector_cli.sh; else printf '%s\n' "inspector cli compatibility skipped: MUSTER_CLI_SOURCE not set"; fi
+	@if [ -n "$${MUSTER_CLI_SOURCE:-}" ] && [ -d "dist/v$(VERSION)" ]; then sh tests/test_release_installer.sh; else printf '%s\n' "release installer test skipped: build release assets and set MUSTER_CLI_SOURCE"; fi
 
 doctor:
 	sh bin/doctor.sh

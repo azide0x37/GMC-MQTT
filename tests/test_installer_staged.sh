@@ -30,7 +30,7 @@ test ! -w "$ROOT/opt/gmc-mqtt/current/muster.yaml"
 test -f "$ROOT/etc/gmc-mqtt/collector.env"
 test -f "$ROOT/etc/gmc-mqtt/mqtt.env"
 test -f "$ROOT/etc/gmc-mqtt/home-assistant.env"
-test "$(stat -f %Lp "$ROOT/etc/gmc-mqtt/mqtt.env" 2>/dev/null || stat -c %a "$ROOT/etc/gmc-mqtt/mqtt.env")" = "600"
+test "$(stat -c %a "$ROOT/etc/gmc-mqtt/mqtt.env" 2>/dev/null || stat -f %Lp "$ROOT/etc/gmc-mqtt/mqtt.env")" = "600"
 test -f "$ROOT/etc/systemd/system/gmc-mqtt-collector.service"
 test -f "$ROOT/etc/systemd/system/gmc-mqtt-ha-bridge.timer"
 
